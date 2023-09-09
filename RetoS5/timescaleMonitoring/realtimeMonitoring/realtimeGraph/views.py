@@ -747,6 +747,92 @@ def get_daterange(request):
     return start, end
 
 
+def get_map_json_custom(request, **kwargs):
+    data_result = {}
+
+    measureParam = kwargs.get("measure", None)
+    selectedMeasure = None
+    measurements = Measurement.objects.all()
+
+    if measureParam != None:
+        selectedMeasure = Measurement.objects.filter(name=measureParam)[0]
+    elif measurements.count() > 0:
+        selectedMeasure = measurements[0]
+
+    locations = Location.objects.all()
+    try:
+        start = datetime.fromtimestamp(
+            float(request.GET.get("from", None)) / 1000
+        )
+    except:
+        start = None
+    try:
+        end = datetime.fromtimestamp(
+            float(request.GET.get("to", None)) / 1000)
+    except:
+        end = None
+    if start == None and end == None:
+        start = datetime.now()
+        start = start - dateutil.relativedelta.relativedelta(weeks=1)
+        end = datetime.now()
+        end += dateutil.relativedelta.relativedelta(days=1)
+    elif end == None:
+        end = datetime.now()
+    elif start == None:
+        start = datetime.fromtimestamp(0)
+
+    data = []
+
+    start_ts = int(start.timestamp() * 1000000)
+    end_ts = int(end.timestamp() * 1000000)
+
+    for location in locations:
+        stations = Station.objects.filter(location=location)
+        locationData = Data.objects.filter(
+            station__in=stations,
+            measurement__name=selectedMeasure.name,
+            time__gte=start_ts,
+            time__lte=end_ts,
+        )
+
+        # Agregar una nueva consulta para obtener la cantidad de datos por día
+        # en el rango de fechas
+        data_by_day = locationData.annotate(
+            date=TruncDate('time')
+        ).values('date').annotate(
+            data_count=Count('id')
+        ).order_by('date')
+
+        if locationData.count() <= 0:
+            continue
+        minVal = locationData.aggregate(Min("min_value"))["min_value__min"]
+        maxVal = locationData.aggregate(Max("max_value"))["max_value__max"]
+        avgVal = locationData.aggregate(Avg("avg_value"))["avg_value__avg"]
+        data.append(
+            {
+                "name": f"{location.city.name}, {location.state.name}, {location.country.name}",
+                "lat": location.lat,
+                "lng": location.lng,
+                "population": stations.count(),
+                "min": minVal if minVal != None else 0,
+                "max": maxVal if maxVal != None else 0,
+                "avg": round(avgVal if avgVal != None else 0, 2),
+                'data_by_day': list(data_by_day),
+            }
+        )
+
+    startFormatted = start.strftime("%d/%m/%Y") if start != None else " "
+    endFormatted = end.strftime("%d/%m/%Y") if end != None else " "
+
+    data_result["locations"] = [loc.str() for loc in locations]
+    data_result["start"] = startFormatted
+    data_result["end"] = endFormatted
+    data_result["data"] = data
+
+    return JsonResponse(data_result)
+
+
+
 """
 Filtro para formatear datos en el template de index
 """
