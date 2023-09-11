@@ -714,7 +714,7 @@ def get_map_json_custom(request, **kwargs):
         data_by_day = locationData.annotate(
             date=TruncDate('time')
         ).values('date').annotate(
-            data_count=Count('id')
+            data_count=Count('time')
         ).order_by('date')
 
         if locationData.count() <= 0:

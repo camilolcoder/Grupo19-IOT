@@ -6,6 +6,9 @@ import time
 import tempfile
 from realtimeMonitoring.utils import getCityCoordinates
 
+from django.db.models.aggregates import Count
+from django.db.models.functions import TruncDate
+
 from django.template.defaulttags import register
 from django.contrib.auth import login, logout
 from realtimeGraph.forms import LoginForm
@@ -798,9 +801,9 @@ def get_map_json_custom(request, **kwargs):
         # Agregar una nueva consulta para obtener la cantidad de datos por día
         # en el rango de fechas
         data_by_day = locationData.annotate(
-            date=TruncDate('time')
+            date=TruncDate('base_time')
         ).values('date').annotate(
-            data_count=Count('id')
+            data_count=Count('base_time')
         ).order_by('date')
 
         if locationData.count() <= 0:
